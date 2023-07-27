@@ -1,0 +1,20 @@
+/target
+
+/target/**
+
+#env variables
+.env*
+!.env.example
+
+# vscode
+.vscode/
+
+# idea
+.idea/**
+gradle/wrapper/**
+gradlew
+gradlew.bat
+out/
+.gradle/**
+target/
+.idea_modules/
