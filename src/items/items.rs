@@ -14,12 +14,15 @@ pub struct Artefact {
 	sell_price_fort_sterling: String,
 	sell_price_martlock: String,
 	sell_price_thetford: String,
+	sell_price_brecilien: String,
 	buy_price_fort_sterling: String,
 	buy_price_martlock: String,
 	buy_price_thetford: String,
+	buy_price_brecilien: String,
 	orders_thetford: String,
 	orders_fort_sterling: String,
 	orders_martlock: String,
+	orders_brecilien: String,
 	created_at: String,
 	updated_at: String,
 }
@@ -34,15 +37,41 @@ pub struct Item {
 	sell_price_fort_sterling: String,
 	sell_price_martlock: String,
 	sell_price_thetford: String,
+	sell_price_brecilien: String,
 	buy_price_fort_sterling: String,
 	buy_price_martlock: String,
 	buy_price_thetford: String,
+	buy_price_brecilien: String,
 	orders_thetford: String,
 	orders_fort_sterling: String,
 	orders_martlock: String,
+	orders_brecilien: String,
 	created_at: String,
 	updated_at: String,
 	artefact: Option<Artefact>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ItemWithoutArtefact {
+	label: String,
+	item_id: String,
+	craft_price: String,
+	enchantment_price: String,
+	artefact_id: String,
+	sell_price_fort_sterling: String,
+	sell_price_martlock: String,
+	sell_price_thetford: String,
+	sell_price_brecilien: String,
+	buy_price_fort_sterling: String,
+	buy_price_martlock: String,
+	buy_price_thetford: String,
+	buy_price_brecilien: String,
+	orders_thetford: String,
+	orders_fort_sterling: String,
+	orders_martlock: String,
+	orders_brecilien: String,
+	created_at: String,
+	updated_at: String,
 }
 
 #[post("/api/item/create")]
@@ -61,12 +90,15 @@ pub async fn read(item_id: Path<String>) -> Result<Json<Option<Item>>, Error> {
 									    sell_price_fort_sterling,
 									    sell_price_martlock,
 									    sell_price_thetford,
+											sell_price_brecilien,
 									    buy_price_fort_sterling,
 									    buy_price_martlock,
 									    buy_price_thetford,
+											buy_price_brecilien,
 									    orders_thetford,
 									    orders_fort_sterling,
 									    orders_martlock,
+									    orders_brecilien,
 									    created_at,
 									    updated_at,
 									    artefact,
@@ -88,11 +120,11 @@ pub async fn read(item_id: Path<String>) -> Result<Json<Option<Item>>, Error> {
 
 #[derive(Serialize)]
 pub struct ItemContent {
-	content: Json<Item>,
+	content: Json<ItemWithoutArtefact>,
 }
 
 #[put("/api/item/{item_id}")]
-pub async fn update(item_id: Path<String>, item: Json<Item>) -> Result<Json<Option<Item>>, Error> {
+pub async fn update(item_id: Path<String>, item: Json<ItemWithoutArtefact>) -> Result<Json<Option<Item>>, Error> {
 	let sql = [
 		"UPDATE items CONTENT $content WHERE item_id = '",
 		&item_id,
@@ -126,12 +158,15 @@ pub async fn list() -> Result<Json<Vec<Item>>, Error> {
 									    sell_price_fort_sterling,
 									    sell_price_martlock,
 									    sell_price_thetford,
+									    sell_price_brecilien,
 									    buy_price_fort_sterling,
 									    buy_price_martlock,
 									    buy_price_thetford,
+											buy_price_brecilien,
 									    orders_thetford,
 									    orders_fort_sterling,
 									    orders_martlock,
+									    orders_brecilien,
 									    created_at,
 									    updated_at,
 									    artefact,
