@@ -3,10 +3,11 @@ use crate::DB;
 use actix_web::web::{Json, Path};
 use actix_web::{delete, get, post, put};
 use serde::{Deserialize, Serialize};
+use surrealdb::types::SurrealValue;
 
 const PERSON: &str = "person";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, surrealdb::types::SurrealValue)]
 pub struct Person {
 	name: String,
 	age: String,
@@ -14,7 +15,7 @@ pub struct Person {
 
 #[post("/api/person/create")]
 pub async fn create(person: Json<Person>) -> Result<Json<Option<Person>>, Error> {
-	let person = DB.create(PERSON).content(person).await?;
+	let person = DB.create(PERSON).content(person.into_inner()).await?;
 	Ok(Json(person))
 }
 
@@ -27,11 +28,6 @@ pub async fn read(name: Path<String>) -> Result<Json<Option<Person>>, Error> {
 	Ok(Json(person))
 }
 
-#[derive(Serialize)]
-pub struct PersonContent {
-	content: Json<Person>,
-}
-
 #[put("/api/person/{name}")]
 pub async fn update(
 	name: Path<String>,
@@ -41,7 +37,7 @@ pub async fn update(
 
 	let person = DB
 		.query(sql)
-		.bind(PersonContent { content: person })
+		.bind(("content", person.into_inner()))
 		.bind(("table", PERSON))
 		.await?
 		.take(0)?;
@@ -51,7 +47,7 @@ pub async fn update(
 
 #[delete("/api/person/{id}")]
 pub async fn delete(id: Path<String>) -> Result<Json<Option<Person>>, Error> {
-	let person = DB.delete((PERSON, &*id)).await?;
+	let person = DB.delete((PERSON, id.as_str())).await?;
 	Ok(Json(person))
 }
 

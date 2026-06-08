@@ -2,6 +2,7 @@
 mod error;
 mod items;
 mod artefacts;
+mod resources;
 mod person;
 
 use actix_cors::Cors;
@@ -11,12 +12,13 @@ use futures::StreamExt;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::LazyLock;
 
 use surrealdb::engine::remote::ws::{Client, Ws};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
-static DB: Surreal<Client> = Surreal::init();
+static DB: LazyLock<Surreal<Client>> = LazyLock::new(Surreal::init);
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
@@ -61,14 +63,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	DB.connect::<Ws>("localhost:8000").await?;
 
 	DB.signin(Root {
-		username: "root",
-		password: "root",
+		username: "root".to_string(),
+		password: "root".to_string(),
 	})
 	.await?;
 
 	DB.use_ns("rust-api").use_db("rust-api").await?;
 
-	println!("Starting server at http://127.0.0.1:8080");
+	DB.query("DEFINE TABLE items; DEFINE TABLE artefacts; DEFINE TABLE resources;").await?;
+
+	println!("Starting server at http://127.0.0.1:8082");
 	HttpServer::new(|| {
 		let cors = Cors::default()
 			.allowed_origin("http://127.0.0.1:3001")
@@ -93,8 +97,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			.service(artefacts::update)
 			.service(artefacts::delete)
 			.service(artefacts::list)
+			.service(resources::create)
+			.service(resources::read)
+			.service(resources::update)
+			.service(resources::delete)
+			.service(resources::list)
 	})
-	.bind(("127.0.0.1", 8080))?
+	.bind(("127.0.0.1", 8082))?
 	.run()
 	.await?;
 

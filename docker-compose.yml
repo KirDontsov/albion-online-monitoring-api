@@ -1,5 +1,11 @@
 version: "1.0.0"
 services:
+  surrealdb:
+    image: surrealdb/surrealdb:v3
+    restart: always
+    command: start --user root --pass root --bind 0.0.0.0:8000
+    ports:
+      - "8000:8000"
   postgresql:
     image: postgres:11-alpine
     restart: always
