@@ -3,6 +3,7 @@ mod error;
 mod items;
 mod artefacts;
 mod resources;
+mod prices;
 mod person;
 
 use actix_cors::Cors;
@@ -71,6 +72,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	DB.use_ns("rust-api").use_db("rust-api").await?;
 
 	DB.query("DEFINE TABLE items; DEFINE TABLE artefacts; DEFINE TABLE resources;").await?;
+	DB.query("UPDATE items SET source = 'api' WHERE source = '' OR source = NONE;").await?;
+	DB.query("UPDATE artefacts SET source = 'api' WHERE source = '' OR source = NONE;").await?;
+	DB.query("UPDATE resources SET source = 'api' WHERE source = '' OR source = NONE;").await?;
+	DB.query("UPDATE items SET updated_at = time::epoch(updated_at) WHERE updated_at CONTAINS 'T';").await?;
+	DB.query("UPDATE artefacts SET updated_at = time::epoch(updated_at) WHERE updated_at CONTAINS 'T';").await?;
+	DB.query("UPDATE resources SET updated_at = time::epoch(updated_at) WHERE updated_at CONTAINS 'T';").await?;
 
 	println!("Starting server at http://127.0.0.1:8082");
 	HttpServer::new(|| {
@@ -102,6 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			.service(resources::update)
 			.service(resources::delete)
 			.service(resources::list)
+			.service(prices::sync_prices)
+			.service(prices::sync_status)
 	})
 	.bind(("127.0.0.1", 8082))?
 	.run()

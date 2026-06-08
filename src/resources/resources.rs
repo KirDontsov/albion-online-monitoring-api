@@ -32,6 +32,7 @@ pub struct Resource {
 	orders_brecilien: String,
 	created_at: String,
 	updated_at: String,
+	source: String,
 }
 
 #[post("/api/resource/create")]
@@ -51,7 +52,7 @@ pub async fn read(item_id: Path<String>) -> Result<Json<Option<Resource>>, Error
 
 #[put("/api/resource/{item_id}")]
 pub async fn update(item_id: Path<String>, resource: Json<Resource>) -> Result<Json<Option<Resource>>, Error> {
-	let mut result = DB.query("UPDATE resources SET label=$content.label, craft_price=$content.craft_price, sell_price_fort_sterling=$content.sell_price_fort_sterling, sell_price_martlock=$content.sell_price_martlock, sell_price_thetford=$content.sell_price_thetford, sell_price_brecilien=$content.sell_price_brecilien, buy_price_fort_sterling=$content.buy_price_fort_sterling, buy_price_martlock=$content.buy_price_martlock, buy_price_thetford=$content.buy_price_thetford, buy_price_brecilien=$content.buy_price_brecilien, orders_thetford=$content.orders_thetford, orders_fort_sterling=$content.orders_fort_sterling, orders_martlock=$content.orders_martlock, orders_brecilien=$content.orders_brecilien, created_at=$content.created_at, updated_at=$content.updated_at WHERE item_id = $id")
+	let mut result = DB.query("UPDATE resources SET label=$content.label, craft_price=$content.craft_price, sell_price_fort_sterling=$content.sell_price_fort_sterling, sell_price_martlock=$content.sell_price_martlock, sell_price_thetford=$content.sell_price_thetford, sell_price_brecilien=$content.sell_price_brecilien, buy_price_fort_sterling=$content.buy_price_fort_sterling, buy_price_martlock=$content.buy_price_martlock, buy_price_thetford=$content.buy_price_thetford, buy_price_brecilien=$content.buy_price_brecilien, orders_thetford=$content.orders_thetford, orders_fort_sterling=$content.orders_fort_sterling, orders_martlock=$content.orders_martlock, orders_brecilien=$content.orders_brecilien, created_at=$content.created_at, updated_at=$content.updated_at, source='manual' WHERE item_id = $id")
 		.bind(("id", item_id.to_string()))
 		.bind(("content", resource.into_inner()))
 		.await?;

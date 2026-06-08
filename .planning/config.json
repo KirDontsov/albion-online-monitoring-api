@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "project": "albion-online-monitoring-api",
+  "auto": false,
+  "features": {
+    "research": true,
+    "ui": false
+  }
+}
