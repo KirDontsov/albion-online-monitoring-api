@@ -3,12 +3,18 @@ use crate::DB;
 use actix_web::web::Json;
 use actix_web::{get, post};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const API_BASE: &str = "https://europe.albion-online-data.com";
 const LOCATIONS: &str = "Thetford,Fort Sterling,Martlock,Brecilien";
-const BATCH_SIZE: usize = 150;
+const BATCH_SIZE: usize = 50;
+
+#[derive(Deserialize, Debug)]
+pub struct SyncRequest {
+	pub item_ids: Option<Vec<String>>,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct AlbionPriceResponse {
@@ -65,13 +71,6 @@ async fn fetch_item_ids() -> Result<Vec<String>, Error> {
 		}
 	}
 
-	let artefacts: Vec<serde_json::Value> = DB.select("artefacts").await?;
-	for a in &artefacts {
-		if let Some(id) = a.get("item_id").and_then(|v| v.as_str()) {
-			ids.push(id.to_string());
-		}
-	}
-
 	let resources: Vec<serde_json::Value> = DB.select("resources").await?;
 	for r in &resources {
 		if let Some(id) = r.get("item_id").and_then(|v| v.as_str()) {
@@ -91,10 +90,44 @@ async fn fetch_prices_batch(item_ids: &[String]) -> Result<Vec<AlbionPriceRespon
 		API_BASE, ids_str, LOCATIONS
 	);
 	println!("Fetching prices from: {}", url);
-	let client = reqwest::Client::new();
-	let res = client.get(&url).send().await?.json::<Vec<AlbionPriceResponse>>().await?;
-	println!("Got {} price records", res.len());
-	Ok(res)
+	let client = reqwest::Client::builder()
+		.timeout(std::time::Duration::from_secs(60))
+		.build()?;
+
+	let mut last_err = None;
+	for attempt in 0..5 {
+		match client.get(&url).send().await {
+			Ok(resp) => {
+				let status = resp.status();
+				if !status.is_success() {
+					let delay = (attempt as u64 + 1) * 5;
+					println!("API returned status {}, retrying in {}s...", status, delay);
+					tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+					last_err = Some(format!("HTTP {}", status));
+					continue;
+				}
+				match resp.json::<Vec<AlbionPriceResponse>>().await {
+					Ok(res) => {
+						println!("Got {} price records", res.len());
+						return Ok(res);
+					}
+					Err(e) => {
+						let delay = (attempt as u64 + 1) * 5;
+						println!("Decode error (attempt {}), retrying in {}s: {}", attempt + 1, delay, e);
+						tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+						last_err = Some(e.to_string());
+					}
+				}
+			}
+			Err(e) => {
+				let delay = (attempt as u64 + 1) * 5;
+				println!("Request error (attempt {}), retrying in {}s: {}", attempt + 1, delay, e);
+				tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+				last_err = Some(e.to_string());
+			}
+		}
+	}
+	Err(Error::Request)
 }
 
 async fn update_db_prices(prices: &[AlbionPriceResponse]) -> Result<(u32, u32), Error> {
@@ -105,33 +138,44 @@ async fn update_db_prices(prices: &[AlbionPriceResponse]) -> Result<(u32, u32), 
 		.unwrap()
 		.as_secs() as i64 - 86400;
 
+	let mut table_map: HashMap<String, String> = HashMap::new();
+	for table in &["items", "resources"] {
+		let rows: Vec<serde_json::Value> = DB.select(*table).await?;
+		for row in &rows {
+			if let Some(id) = row.get("item_id").and_then(|v| v.as_str()) {
+				table_map.entry(id.to_string()).or_insert_with(|| table.to_string());
+			}
+		}
+	}
+
 	for price in prices {
 		if price.sell_price_min == 0 {
 			skipped += 1;
 			continue;
 		}
 		if let Some((sell_col, buy_col)) = city_to_column(&price.city) {
-			let tables = ["items", "artefacts", "resources"];
-			for table in &tables {
-				let query = format!(
-					"UPDATE {} SET {} = $sell, {} = $buy, updated_at = $now WHERE item_id = $id AND (source = 'api' OR updated_at < $cutoff)",
-					table, sell_col, buy_col
-				);
-				let now = SystemTime::now()
-					.duration_since(UNIX_EPOCH)
-					.unwrap()
-					.as_secs() as i64;
-				let mut result = DB
-					.query(&query)
-					.bind(("sell", price.sell_price_min.to_string()))
-					.bind(("buy", price.buy_price_max.to_string()))
-					.bind(("id", price.item_id.clone()))
-					.bind(("now", now))
-					.bind(("cutoff", one_day_ago))
-					.await?;
-				let _: Vec<serde_json::Value> = result.take(0)?;
-				updated += 1;
-			}
+			let table = match table_map.get(&price.item_id) {
+				Some(t) => t.as_str(),
+				None => continue,
+			};
+			let query = format!(
+				"UPDATE {} SET {} = $sell, {} = $buy, updated_at = $now WHERE item_id = $id AND (source = 'api' OR <string>updated_at < $cutoff)",
+				table, sell_col, buy_col
+			);
+			let now = SystemTime::now()
+				.duration_since(UNIX_EPOCH)
+				.unwrap()
+				.as_secs() as i64;
+			let mut result = DB
+				.query(&query)
+				.bind(("sell", price.sell_price_min.to_string()))
+				.bind(("buy", price.buy_price_max.to_string()))
+				.bind(("id", price.item_id.clone()))
+				.bind(("now", now))
+				.bind(("cutoff", one_day_ago))
+				.await?;
+			let _: Vec<serde_json::Value> = result.take(0)?;
+			updated += 1;
 		}
 	}
 
@@ -139,7 +183,7 @@ async fn update_db_prices(prices: &[AlbionPriceResponse]) -> Result<(u32, u32), 
 }
 
 #[post("/api/prices/sync")]
-pub async fn sync_prices() -> Result<Json<SyncStatus>, Error> {
+pub async fn sync_prices(body: Option<Json<SyncRequest>>) -> Result<Json<SyncStatus>, Error> {
 	{
 		let mut status = SYNC_STATUS.lock().unwrap();
 		if status.running {
@@ -151,14 +195,33 @@ pub async fn sync_prices() -> Result<Json<SyncStatus>, Error> {
 		status.errors = 0;
 	}
 
-	let item_ids = match fetch_item_ids().await {
-		Ok(ids) => ids,
-		Err(e) => {
-			let mut status = SYNC_STATUS.lock().unwrap();
-			status.running = false;
-			status.errors += 1;
-			println!("Error fetching item IDs: {}", e);
-			return Ok(Json(status.clone()));
+	// Use provided item_ids or fallback to all from DB
+	let item_ids = if let Some(Json(req)) = body {
+		if let Some(ids) = req.item_ids.filter(|ids| !ids.is_empty()) {
+			println!("Syncing {} provided item IDs", ids.len());
+			ids
+		} else {
+			match fetch_item_ids().await {
+				Ok(ids) => ids,
+				Err(e) => {
+					let mut status = SYNC_STATUS.lock().unwrap();
+					status.running = false;
+					status.errors += 1;
+					println!("Error fetching item IDs: {}", e);
+					return Ok(Json(status.clone()));
+				}
+			}
+		}
+	} else {
+		match fetch_item_ids().await {
+			Ok(ids) => ids,
+			Err(e) => {
+				let mut status = SYNC_STATUS.lock().unwrap();
+				status.running = false;
+				status.errors += 1;
+				println!("Error fetching item IDs: {}", e);
+				return Ok(Json(status.clone()));
+			}
 		}
 	};
 
@@ -188,9 +251,7 @@ pub async fn sync_prices() -> Result<Json<SyncStatus>, Error> {
 		}
 
 		// Rate limit: wait between batches
-		if chunk.len() == BATCH_SIZE {
-			tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-		}
+		tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 	}
 
 	let now = SystemTime::now()

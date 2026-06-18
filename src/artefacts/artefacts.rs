@@ -27,6 +27,10 @@ pub struct Artefact {
 	created_at: String,
 	updated_at: String,
 	source: String,
+	#[serde(default)]
+	comment: String,
+	#[serde(default)]
+	popularity: String,
 }
 
 #[post("/api/artefact/create")]
@@ -37,7 +41,7 @@ pub async fn create(artefact: Json<Artefact>) -> Result<Json<Option<Artefact>>, 
 
 #[get("/api/artefact/{item_id}")]
 pub async fn read(item_id: Path<String>) -> Result<Json<Option<Artefact>>, Error> {
-	let mut result = DB.query("SELECT * FROM artefacts WHERE item_id = $id")
+	let mut result = DB.query("SELECT label, item_id, crafted_item_id, sell_price_fort_sterling, sell_price_martlock, sell_price_thetford, sell_price_brecilien, buy_price_fort_sterling, buy_price_martlock, buy_price_thetford, buy_price_brecilien, orders_thetford, orders_fort_sterling, orders_martlock, orders_brecilien, <string>created_at AS created_at, <string>updated_at AS updated_at, source, comment, popularity FROM artefacts WHERE item_id = $id")
 		.bind(("id", item_id.to_string()))
 		.await?;
 	let item: Option<Artefact> = result.take(0)?;
@@ -46,7 +50,7 @@ pub async fn read(item_id: Path<String>) -> Result<Json<Option<Artefact>>, Error
 
 #[put("/api/artefact/{item_id}")]
 pub async fn update(item_id: Path<String>, artefact: Json<Artefact>) -> Result<Json<Option<Artefact>>, Error> {
-	let mut result = DB.query("UPDATE artefacts SET label=$content.label, crafted_item_id=$content.crafted_item_id, sell_price_fort_sterling=$content.sell_price_fort_sterling, sell_price_martlock=$content.sell_price_martlock, sell_price_thetford=$content.sell_price_thetford, sell_price_brecilien=$content.sell_price_brecilien, buy_price_fort_sterling=$content.buy_price_fort_sterling, buy_price_martlock=$content.buy_price_martlock, buy_price_thetford=$content.buy_price_thetford, buy_price_brecilien=$content.buy_price_brecilien, orders_thetford=$content.orders_thetford, orders_fort_sterling=$content.orders_fort_sterling, orders_martlock=$content.orders_martlock, orders_brecilien=$content.orders_brecilien, created_at=$content.created_at, updated_at=$content.updated_at, source='manual' WHERE item_id = $id")
+	let mut result = DB.query("UPDATE artefacts SET label=$content.label, crafted_item_id=$content.crafted_item_id, sell_price_fort_sterling=$content.sell_price_fort_sterling, sell_price_martlock=$content.sell_price_martlock, sell_price_thetford=$content.sell_price_thetford, sell_price_brecilien=$content.sell_price_brecilien, buy_price_fort_sterling=$content.buy_price_fort_sterling, buy_price_martlock=$content.buy_price_martlock, buy_price_thetford=$content.buy_price_thetford, buy_price_brecilien=$content.buy_price_brecilien, orders_thetford=$content.orders_thetford, orders_fort_sterling=$content.orders_fort_sterling, orders_martlock=$content.orders_martlock, orders_brecilien=$content.orders_brecilien, created_at=$content.created_at, updated_at=$content.updated_at, comment=$content.comment, popularity=$content.popularity, source='manual' WHERE item_id = $id")
 		.bind(("id", item_id.to_string()))
 		.bind(("content", artefact.into_inner()))
 		.await?;
@@ -71,7 +75,9 @@ fn tier(item_id: &str) -> u8 {
 
 #[get("/api/artefacts")]
 pub async fn list() -> Result<Json<Vec<Artefact>>, Error> {
-	let mut artefacts: Vec<Artefact> = DB.select(ARTEFACTS).await?;
+	let mut result = DB.query("SELECT label, item_id, crafted_item_id, sell_price_fort_sterling, sell_price_martlock, sell_price_thetford, sell_price_brecilien, buy_price_fort_sterling, buy_price_martlock, buy_price_thetford, buy_price_brecilien, orders_thetford, orders_fort_sterling, orders_martlock, orders_brecilien, <string>created_at AS created_at, <string>updated_at AS updated_at, source, comment, popularity FROM artefacts")
+		.await?;
+	let mut artefacts: Vec<Artefact> = result.take(0)?;
 	artefacts.sort_by(|a, b| {
 		a.label.cmp(&b.label)
 			.then_with(|| tier(&a.item_id).cmp(&tier(&b.item_id)))

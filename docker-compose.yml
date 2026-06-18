@@ -1,9 +1,10 @@
-version: "1.0.0"
 services:
   surrealdb:
     image: surrealdb/surrealdb:v3
     restart: always
-    command: start --user root --pass root --bind 0.0.0.0:8000
+    command: start --user root --pass root --bind 0.0.0.0:8000 rocksdb:/data/surreal.db
+    volumes:
+      - ./surreal-data:/data
     ports:
       - "8000:8000"
   postgresql:
@@ -13,5 +14,7 @@ services:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=admin
       - POSTGRES_DB=actix
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
